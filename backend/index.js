@@ -24,7 +24,7 @@ const corsOptions = {
   origin: [
     "http://localhost:3000", 
     "http://127.0.0.1:3000",
-    "https://wall-echo.netlify.app/"  // Add your actual Netlify URL here
+    "https://wall-echo.netlify.app"  // Add your actual Netlify URL here
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -170,3 +170,4 @@ server.listen(port, () => {
   console.log(`🚀 WALL-Echo server running on port ${port}`);
   console.log(`📡 Socket.io enabled for real-time collaboration`);
 });
+
