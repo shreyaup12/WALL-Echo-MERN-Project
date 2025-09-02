@@ -1,0 +1,15 @@
+.wall-echo-app {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: #0B1E3F;
+  min-height: 100vh;
+}
+
+/* Basic utility classes */
+.flex { display: flex; }
+.h-screen { height: 100vh; }
+.bg-gray-800 { background-color: #1f2937; }
+.text-white { color: white; }
+.p-4 { padding: 1rem; }
+.rounded-lg { border-radius: 0.5rem; }
+.border { border-width: 1px; }
+.border-gray-700 { border-color: #374151; }
