@@ -1,5 +1,9 @@
 # WALL-Echo-MERN-Project
 Wall Echo 🤖💛 – A WALL-E inspired AI assistant with a playful personality. Tracks recent chats, supports real-time multi-user collaboration, and makes team brainstorming, project discussions, and daily conversations engaging and fun. Built with MERN for seamless cross-device use.
+
+🚀 Team-Friendly Feature:
+Chat alone or with your friends—Wall Echo supports multi-user chats, making brainstorming and collaboration easy and fun!
+
 🏗 Technical Foundation:
 Built with the MERN Stack for scalability and real-time performance:
 	•	Backend: Node.js + Express + MongoDB with JWT authentication
