@@ -16,7 +16,7 @@ const RoomManager = ({ user, onRoomSelect, onClose, currentRoom }) => {
   const loadUserRooms = async () => {
     try {
       const token = localStorage.getItem('authToken');
-      const response = await fetch('${process.env.REACT_APP_API_URL}/api/v1/room/', {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/v1/room/`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -44,7 +44,7 @@ const RoomManager = ({ user, onRoomSelect, onClose, currentRoom }) => {
 
     try {
       const token = localStorage.getItem('authToken');
-      const response = await fetch('${process.env.REACT_APP_API_URL}/api/v1/room/create', {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/v1/room/create`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
