@@ -21,7 +21,11 @@ const MONGO_URL = process.env.MONGO_URI;
 
 // Enhanced CORS configuration for Socket.io
 const corsOptions = {
-  origin: ["http://localhost:3000", "http://127.0.0.1:3000"],
+  origin: [
+    "http://localhost:3000", 
+    "http://127.0.0.1:3000",
+    "https://wall-echo.netlify.app/"  // Add your actual Netlify URL here
+  ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
