@@ -134,10 +134,10 @@ const ChatInterface = ({ user, onLogout }) => {
 
       // Load room messages
       const token = localStorage.getItem('authToken');
-      const response = await fetch(`http://localhost:4002/api/v1/prompt/room/${room.id}`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/v1/prompt/room/${room.id}`, {
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
+         'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
         }
       });
 
@@ -177,7 +177,7 @@ const ChatInterface = ({ user, onLogout }) => {
   const loadRecentChats = async () => {
     try {
       const token = localStorage.getItem('authToken');
-      const response = await fetch('http://localhost:4002/api/v1/prompt/all', {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/v1/prompt/all`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -242,7 +242,7 @@ const ChatInterface = ({ user, onLogout }) => {
         { content: "GREETING_REQUEST", roomId: currentRoom.id } :
         { content: "GREETING_REQUEST" };
 
-      const response = await fetch('http://localhost:4002/api/v1/prompt/', {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/v1/prompt/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -305,7 +305,7 @@ const ChatInterface = ({ user, onLogout }) => {
     
     try {
       const token = localStorage.getItem('authToken');
-      const response = await fetch(`http://localhost:4002/api/v1/prompt/chat/${chatId}`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/v1/prompt/chat/${chatId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -386,7 +386,7 @@ const ChatInterface = ({ user, onLogout }) => {
         ...(currentRoom && { roomId: currentRoom.id })
       };
 
-      const response = await fetch('http://localhost:4002/api/v1/prompt/', {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/v1/prompt/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -993,9 +993,9 @@ const App = () => {
     setAuthFeedback({ type: '', message: '' });
 
     try {
-      const endpoint = authMode === 'login' 
-        ? 'http://localhost:4002/api/v1/user/login'
-        : 'http://localhost:4002/api/v1/user/signup';
+    const endpoint = authMode === 'login' 
+      ? `${process.env.REACT_APP_API_URL}/api/v1/user/login`
+      : `${process.env.REACT_APP_API_URL}/api/v1/user/signup`;
       
       const body = authMode === 'login' 
         ? { email: authData.email, password: authData.password }
