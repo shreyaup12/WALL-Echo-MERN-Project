@@ -13,17 +13,12 @@ class SocketService {
     };
   }
 
-  connect(serverUrl = 'http://localhost:4002') {
+  connect(serverUrl = process.env.REACT_APP_API_URL || 'http://localhost:4002') {
     if (this.socket?.connected) {
       return this.socket;
     }
 
-    this.socket = io(serverUrl, {
-      cors: {
-        origin: "http://localhost:3000",
-        methods: ["GET", "POST"]
-      }
-    });
+   this.socket = io(serverUrl);
 
     this.setupEventListeners();
     return this.socket;
