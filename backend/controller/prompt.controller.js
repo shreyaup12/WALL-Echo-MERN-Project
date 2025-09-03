@@ -387,6 +387,7 @@ Directive?`;
     });
   }
 };
+
 const getAllChatSessions = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -399,56 +400,50 @@ const getAllChatSessions = async (req, res) => {
       matchFilter.roomId = null;
     }
     
-    // DEBUG: Check what messages exist
-    const allMessages = await Prompt.find(matchFilter).sort({ createdAt: -1 }).limit(10);
-    console.log("🔍 DEBUG - All messages for user:", allMessages.map(m => ({
-      id: m._id,
-      content: m.content.substring(0, 30),
-      chatSessionId: m.chatSessionId,
-      createdAt: m.createdAt
-    })));
+    // SIMPLER APPROACH: Get unique chatSessionIds first
+    const uniqueSessionIds = await Prompt.distinct("chatSessionId", matchFilter);
+    console.log("🔍 DEBUG - Unique session IDs:", uniqueSessionIds);
     
-    // Original aggregation
-    const sessions = await Prompt.aggregate([
-      { $match: matchFilter },
-      {
-        $group: {
-          _id: "$chatSessionId",
-          firstMessage: { $first: "$$ROOT" },
-          lastMessage: { $last: "$$ROOT" },
-          messageCount: { $sum: 1 },
-          createdAt: { $first: "$createdAt" },
-          updatedAt: { $last: "$createdAt" }
-        }
-      },
-      { $sort: { updatedAt: -1 } },
-      {
-        $project: {
-          chatSessionId: "$_id",
-          title: {
-            $substr: ["$firstMessage.content", 0, 50]
-          },
-          preview: {
-            $substr: ["$lastMessage.content", 0, 100]
-          },
-          messageCount: 1,
-          createdAt: 1,
-          updatedAt: 1,
-          conversationType: "$firstMessage.metadata.conversationType"
-        }
+    // Build sessions manually
+    const sessions = [];
+    
+    for (const sessionId of uniqueSessionIds) {
+      if (!sessionId) continue; // Skip null/undefined
+      
+      const sessionMessages = await Prompt.find({
+        ...matchFilter,
+        chatSessionId: sessionId
+      }).sort({ createdAt: 1 });
+      
+      if (sessionMessages.length > 0) {
+        const firstMessage = sessionMessages[0];
+        const lastMessage = sessionMessages[sessionMessages.length - 1];
+        
+        sessions.push({
+          chatSessionId: sessionId,
+          title: firstMessage.content.length > 50 ? 
+            firstMessage.content.substring(0, 50) + '...' : 
+            firstMessage.content,
+          preview: lastMessage.content.length > 100 ? 
+            lastMessage.content.substring(0, 100) + '...' : 
+            lastMessage.content,
+          messageCount: sessionMessages.length,
+          createdAt: firstMessage.createdAt,
+          updatedAt: lastMessage.createdAt,
+          conversationType: firstMessage.metadata?.conversationType || 'mixed'
+        });
       }
-    ]);
+    }
     
-    console.log("🔍 DEBUG - Aggregation result:", sessions);
+    // Sort by most recent
+    sessions.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+    
+    console.log("🔍 DEBUG - Final sessions count:", sessions.length);
     
     res.json({
       message: "Chat sessions retrieved successfully",
       sessions,
-      isRoomChat: !!roomId,
-      debug: {
-        totalMessages: allMessages.length,
-        messagesWithChatSessionId: allMessages.filter(m => m.chatSessionId).length
-      }
+      isRoomChat: !!roomId
     });
   } catch (error) {
     console.error("❌ Error in getAllChatSessions:", error);
@@ -659,4 +654,5 @@ export {
   getRoomMessages, // NEW
   deleteChat
 };
+
 
