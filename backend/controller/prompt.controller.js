@@ -387,7 +387,6 @@ Directive?`;
     });
   }
 };
-
 const getAllChatSessions = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -400,6 +399,16 @@ const getAllChatSessions = async (req, res) => {
       matchFilter.roomId = null;
     }
     
+    // DEBUG: Check what messages exist
+    const allMessages = await Prompt.find(matchFilter).sort({ createdAt: -1 }).limit(10);
+    console.log("🔍 DEBUG - All messages for user:", allMessages.map(m => ({
+      id: m._id,
+      content: m.content.substring(0, 30),
+      chatSessionId: m.chatSessionId,
+      createdAt: m.createdAt
+    })));
+    
+    // Original aggregation
     const sessions = await Prompt.aggregate([
       { $match: matchFilter },
       {
@@ -430,10 +439,16 @@ const getAllChatSessions = async (req, res) => {
       }
     ]);
     
+    console.log("🔍 DEBUG - Aggregation result:", sessions);
+    
     res.json({
       message: "Chat sessions retrieved successfully",
       sessions,
-      isRoomChat: !!roomId
+      isRoomChat: !!roomId,
+      debug: {
+        totalMessages: allMessages.length,
+        messagesWithChatSessionId: allMessages.filter(m => m.chatSessionId).length
+      }
     });
   } catch (error) {
     console.error("❌ Error in getAllChatSessions:", error);
@@ -644,3 +659,4 @@ export {
   getRoomMessages, // NEW
   deleteChat
 };
+
