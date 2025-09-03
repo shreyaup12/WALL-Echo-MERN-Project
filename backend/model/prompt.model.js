@@ -12,6 +12,11 @@ const promptSchema = new mongoose.Schema({
     default: null,
     index: true // For efficient room-based queries
   },
+  chatSessionId: {
+    type: String,
+    required: true,
+    index: true
+  },
   userName: {
     type: String,
     default: null // Cache user name for shared chats
@@ -62,6 +67,7 @@ const promptSchema = new mongoose.Schema({
 // Index for efficient room queries
 promptSchema.index({ roomId: 1, createdAt: 1 });
 promptSchema.index({ userId: 1, roomId: 1 });
+promptSchema.index({ userId: 1, chatSessionId: 1, createdAt: 1 });
 
 const Prompt = mongoose.model("Prompt", promptSchema);
 
