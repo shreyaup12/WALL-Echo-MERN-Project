@@ -11,6 +11,7 @@ const ChatInterface = ({ user, onLogout }) => {
   const [currentSound, setCurrentSound] = useState('');
   const [recentChats, setRecentChats] = useState([]);
   const [selectedChat, setSelectedChat] = useState(null);
+  const [currentChatSessionId, setCurrentChatSessionId] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [openMenuId, setOpenMenuId] = useState(null);
   
@@ -128,6 +129,7 @@ const ChatInterface = ({ user, onLogout }) => {
       setCurrentRoom(room);
       setRoomParticipants(room.participants || []);
       setSelectedChat(null); // Clear individual chat selection
+      setCurrentChatSessionId(null);
       
       // Join the new room via socket
       socketService.joinRoom(room.id, user.id);
@@ -169,6 +171,7 @@ const ChatInterface = ({ user, onLogout }) => {
       setCurrentRoom(null);
       setRoomParticipants([]);
       setMessages([]);
+      setCurrentChatSessionId(null);
       greetUser(); // Go back to individual chat
     }
   };
@@ -177,7 +180,7 @@ const ChatInterface = ({ user, onLogout }) => {
   const loadRecentChats = async () => {
     try {
       const token = localStorage.getItem('authToken');
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/v1/prompt/all`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/v1/prompt/chat-sessions`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -186,7 +189,14 @@ const ChatInterface = ({ user, onLogout }) => {
       
       if (response.ok) {
         const data = await response.json();
-        const chatSessions = groupMessagesBySession(data.prompts);
+        const chatSessions = data.sessions.map(session => ({
+          id: session.chatSessionId,
+          chatSessionId: session.chatSessionId,
+          title: session.title.length > 30 ? session.title.substring(0, 30) + '...' : session.title,
+          messageCount: session.messageCount,
+          date: new Date(session.updatedAt),
+          conversationType: session.conversationType
+        }));
         setRecentChats(chatSessions);
       }
     } catch (error) {
@@ -234,13 +244,13 @@ const ChatInterface = ({ user, onLogout }) => {
   };
 
   // Greet user
-  const greetUser = async () => {
+  const greetUser = async (chatSessionId = null) => {
     try {
       const token = localStorage.getItem('authToken');
       
       const requestBody = currentRoom ? 
-        { content: "GREETING_REQUEST", roomId: currentRoom.id } :
-        { content: "GREETING_REQUEST" };
+        { content: "GREETING_REQUEST", roomId: currentRoom.id, chatSessionId } :
+        { content: "GREETING_REQUEST", chatSessionId };
 
       const response = await fetch(`${process.env.REACT_APP_API_URL}/api/v1/prompt/`, {
         method: 'POST',
@@ -262,6 +272,9 @@ const ChatInterface = ({ user, onLogout }) => {
           isRoomMessage: !!currentRoom
         };
         setMessages([greetingMessage]);
+        if (data.chatSessionId) {
+          setCurrentChatSessionId(data.chatSessionId);
+        }
       }
     } catch (error) {
       console.error('Error getting greeting:', error);
@@ -269,34 +282,69 @@ const ChatInterface = ({ user, onLogout }) => {
   };
 
   // Load specific chat session (individual chats only)
-  const loadChatSession = (session) => {
+  const loadChatSession = async (session) => {
     if (currentRoom) {
       leaveCurrentRoom(); // Leave room first
     }
 
-    const sessionMessages = session.messages.map((msg, index) => ({
-      id: `session-${session.id}-${index}`,
-      role: msg.role,
-      content: msg.content,
-      timestamp: new Date(msg.createdAt),
-      isRoomMessage: false
-    }));
-    
-    setMessages(sessionMessages);
-    setSelectedChat(session);
-    setOpenMenuId(null);
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/v1/prompt/chat-sessions/${session.chatSessionId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const sessionMessages = data.prompts.map((msg, index) => ({
+          id: `session-${session.chatSessionId}-${index}`,
+          role: msg.role,
+          content: msg.content,
+          timestamp: new Date(msg.createdAt),
+          isRoomMessage: false
+        }));
+        
+        setMessages(sessionMessages);
+        setSelectedChat(session);
+        setCurrentChatSessionId(session.chatSessionId);
+        setOpenMenuId(null);
+      }
+    } catch (error) {
+      console.error('Error loading chat session:', error);
+    }
   };
 
   // Start new individual chat
-  const startNewChat = () => {
+  const startNewChat = async () => {
     if (currentRoom) {
       leaveCurrentRoom();
     }
     
-    setMessages([]);
-    setSelectedChat(null);
-    setOpenMenuId(null);
-    greetUser();
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/v1/prompt/chat-sessions`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({})
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setMessages([]);
+        setSelectedChat(null);
+        setCurrentChatSessionId(data.chatSessionId);
+        setOpenMenuId(null);
+        greetUser(data.chatSessionId);
+        loadRecentChats();
+      }
+    } catch (error) {
+      console.error('Error creating new chat:', error);
+    }
   };
 
   // Delete chat 
@@ -305,7 +353,7 @@ const ChatInterface = ({ user, onLogout }) => {
     
     try {
       const token = localStorage.getItem('authToken');
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/v1/prompt/chat/${chatId}`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/v1/prompt/chat-sessions/${chatId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -316,11 +364,11 @@ const ChatInterface = ({ user, onLogout }) => {
       if (response.ok) {
         setOpenMenuId(null);
         
-        if (selectedChat?.id === chatId) {
+        if (selectedChat?.chatSessionId === chatId || currentChatSessionId === chatId) {
           startNewChat();
         }
         
-        setRecentChats(prev => prev.filter(chat => chat.id !== chatId));
+        setRecentChats(prev => prev.filter(chat => chat.chatSessionId !== chatId));
         
         setTimeout(() => {
           loadRecentChats();
@@ -350,6 +398,11 @@ const ChatInterface = ({ user, onLogout }) => {
 
   const sendMessage = async () => {
     if (!inputMessage.trim()) return;
+
+    if (!currentChatSessionId && !currentRoom) {
+      await startNewChat();
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
 
     // Get user's room color if in a room
     const userParticipant = currentRoom ? 
@@ -383,6 +436,7 @@ const ChatInterface = ({ user, onLogout }) => {
       const token = localStorage.getItem('authToken');
       const requestBody = {
         content: messageToSend,
+        chatSessionId: currentChatSessionId,
         ...(currentRoom && { roomId: currentRoom.id })
       };
 
@@ -568,7 +622,7 @@ const ChatInterface = ({ user, onLogout }) => {
             <div className="space-y-3">
               {recentChats.length === 0 ? (
                 <div className="text-center text-gray-400 py-8">
-                  <div className="text-3xl mb-2">݁ ˖.   ݁🌱 ݁.˖ ݁</div>
+                  <div className="text-3xl mb-2">✦ ˖.   ˖🌱 ˖.˖ ✦</div>
                   <p className="text-sm">No recent chats yet!</p>
                   <p className="text-xs">Start chatting with WALL-Echo</p>
                 </div>
@@ -577,7 +631,7 @@ const ChatInterface = ({ user, onLogout }) => {
                   <div
                     key={chat.id}
                     className={`group relative p-3 rounded-lg border transition-all hover:bg-white/10 ${
-                      selectedChat?.id === chat.id
+                      selectedChat?.chatSessionId === chat.chatSessionId
                         ? 'bg-blue-500/20 border-blue-400/50'
                         : 'bg-white/5 border-white/20'
                     }`}
@@ -592,19 +646,19 @@ const ChatInterface = ({ user, onLogout }) => {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              setOpenMenuId(openMenuId === chat.id ? null : chat.id);
+                              setOpenMenuId(openMenuId === chat.chatSessionId ? null : chat.chatSessionId);
                             }}
                             className="text-gray-400 hover:text-white text-sm p-1 opacity-0 group-hover:opacity-100 transition-opacity"
                           >
                             ⋯
                           </button>
                           
-                          {openMenuId === chat.id && (
+                          {openMenuId === chat.chatSessionId && (
                             <div className="absolute right-0 top-6 bg-gray-800 border border-white/20 rounded-lg shadow-lg z-50 min-w-32">
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleDeleteChat(chat.id);
+                                  handleDeleteChat(chat.chatSessionId);
                                   setOpenMenuId(null);
                                 }}
                                 className="w-full px-3 py-2 text-left text-red-400 hover:bg-red-500/20 rounded-lg text-sm flex items-center space-x-2"
@@ -647,7 +701,9 @@ const ChatInterface = ({ user, onLogout }) => {
   useEffect(() => {
     if (!currentRoom) {
       loadRecentChats();
-      greetUser();
+      if (!currentChatSessionId) {
+        startNewChat();
+      }
     }
   }, [currentRoom]);
 
@@ -1213,7 +1269,7 @@ const App = () => {
                 />
                 {authData.email && !isValidEmail(authData.email) && (
                   <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                    <span className="text-red-400 text-sm">❌</span>
+                    <span className="text-red-400 text-sm">⌫</span>
                   </div>
                 )}
                 {authData.email && isValidEmail(authData.email) && (
