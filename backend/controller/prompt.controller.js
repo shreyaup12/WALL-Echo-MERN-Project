@@ -2,6 +2,7 @@ import Prompt from "../model/prompt.model.js";
 import Room from "../model/room.model.js";
 import User from "../model/user.model.js";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { v4 as uuidv4 } from 'uuid';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
@@ -121,12 +122,42 @@ Respond with detailed, helpful information in the WALL-Echo format.`;
   }
 };
 
+const createNewChatSession = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { roomId } = req.body;
+    
+    const chatSessionId = uuidv4();
+    
+    console.log("🆕 Creating new chat session:", { userId, chatSessionId, roomId });
+    
+    res.json({
+      message: "New chat session created",
+      chatSessionId,
+      roomId: roomId || null
+    });
+    
+  } catch (error) {
+    console.error("❌ Error creating new chat session:", error);
+    res.status(500).json({ 
+      message: "Error creating new chat session", 
+      error: error.message 
+    });
+  }
+};
+
 const submitPrompt = async (req, res) => {
   try {
-    const { content, roomId } = req.body; // NEW: roomId parameter
+    const { content, roomId, chatSessionId } = req.body; // NEW: roomId parameter
     const userId = req.user.id;
     
-    console.log("📝 Submit prompt:", { userId, content, roomId });
+    console.log("📝 Submit prompt:", { userId, content, roomId, chatSessionId });
+    
+    if (!chatSessionId) {
+      return res.status(400).json({ 
+        message: "chatSessionId is required" 
+      });
+    }
     
     // Check if this is a greeting request from frontend
     const isGreetingRequest = content === "GREETING_REQUEST" || content.startsWith("__GREETING__");
@@ -148,10 +179,14 @@ How can I help your team today?`;
         }
       } else {
         // Individual greeting 
-        const existingPrompts = await Prompt.countDocuments({ userId, roomId: null });
-        const isFirstTime = existingPrompts === 0;
+        const existingInSession = await Prompt.countDocuments({ 
+          userId, 
+          chatSessionId,
+          roomId: null 
+        });
+        const isFirstInSession = existingInSession === 0;
         
-        if (isFirstTime) {
+        if (isFirstInSession) {
           greetingContent = `[gentle startup hum… beep ✦ whirr]
 
 WALL Echo online 🤖✨
@@ -165,7 +200,8 @@ Directive?`;
       return res.json({
         message: "Greeting generated",
         aiResponse: greetingContent,
-        isGreeting: true
+        isGreeting: true,
+        chatSessionId
       });
     }
 
@@ -222,6 +258,7 @@ Directive?`;
     const userPrompt = await Prompt.create({
       userId,
       roomId: roomId || null,
+      chatSessionId,
       userName,
       userColor,
       role: "user",
@@ -244,6 +281,7 @@ Directive?`;
     
     // Get recent conversation for context
     const recentPrompts = await Prompt.find({ 
+      chatSessionId,
       $or: [
         { userId, roomId: null }, // Personal chats
         { roomId } // Room chats (if roomId provided)
@@ -309,6 +347,7 @@ Directive?`;
     const aiPrompt = await Prompt.create({
       userId,
       roomId: roomId || null,
+      chatSessionId,
       userName: "WALL-Echo", // AI assistant name
       userColor: "#4ECDC4", // AI assistant color
       role: "assistant",
@@ -332,6 +371,7 @@ Directive?`;
       promptId: userPrompt._id,
       aiPromptId: aiPrompt._id,
       conversationType,
+      chatSessionId,
       roomContext: roomContext ? {
         roomId,
         roomName: roomContext.roomName,
@@ -343,6 +383,121 @@ Directive?`;
     console.error("❌ Error in submitPrompt:", error);
     res.status(500).json({ 
       message: "Error processing prompt", 
+      error: error.message 
+    });
+  }
+};
+
+const getAllChatSessions = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { roomId } = req.query;
+    
+    const matchFilter = { userId };
+    if (roomId) {
+      matchFilter.roomId = roomId;
+    } else {
+      matchFilter.roomId = null;
+    }
+    
+    const sessions = await Prompt.aggregate([
+      { $match: matchFilter },
+      {
+        $group: {
+          _id: "$chatSessionId",
+          firstMessage: { $first: "$$ROOT" },
+          lastMessage: { $last: "$$ROOT" },
+          messageCount: { $sum: 1 },
+          createdAt: { $first: "$createdAt" },
+          updatedAt: { $last: "$createdAt" }
+        }
+      },
+      { $sort: { updatedAt: -1 } },
+      {
+        $project: {
+          chatSessionId: "$_id",
+          title: {
+            $substr: ["$firstMessage.content", 0, 50]
+          },
+          preview: {
+            $substr: ["$lastMessage.content", 0, 100]
+          },
+          messageCount: 1,
+          createdAt: 1,
+          updatedAt: 1,
+          conversationType: "$firstMessage.metadata.conversationType"
+        }
+      }
+    ]);
+    
+    res.json({
+      message: "Chat sessions retrieved successfully",
+      sessions,
+      isRoomChat: !!roomId
+    });
+  } catch (error) {
+    console.error("❌ Error in getAllChatSessions:", error);
+    res.status(500).json({ 
+      message: "Error retrieving chat sessions", 
+      error: error.message 
+    });
+  }
+};
+
+const getChatSession = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { chatSessionId } = req.params;
+    const { roomId } = req.query;
+    
+    const filter = { userId, chatSessionId };
+    if (roomId) {
+      filter.roomId = roomId;
+    } else {
+      filter.roomId = null;
+    }
+    
+    const prompts = await Prompt.find(filter).sort({ createdAt: 1 });
+    
+    res.json({
+      message: "Chat session retrieved successfully",
+      prompts,
+      chatSessionId,
+      isRoomChat: !!roomId
+    });
+  } catch (error) {
+    console.error("❌ Error in getChatSession:", error);
+    res.status(500).json({ 
+      message: "Error retrieving chat session", 
+      error: error.message 
+    });
+  }
+};
+
+const deleteChatSession = async (req, res) => {
+  try {
+    const { chatSessionId } = req.params;
+    const userId = req.user.id;
+    
+    console.log("🗑️ DELETING: Chat session", chatSessionId, "for user", userId);
+    
+    const result = await Prompt.deleteMany({ 
+      chatSessionId,
+      userId 
+    });
+    
+    console.log("✅ DELETED:", result.deletedCount, "messages from chat session");
+    
+    res.json({
+      message: "Chat session deleted successfully",
+      deletedCount: result.deletedCount,
+      chatSessionId
+    });
+    
+  } catch (error) {
+    console.error("❌ Error deleting chat session:", error);
+    res.status(500).json({ 
+      message: "Error deleting chat session", 
       error: error.message 
     });
   }
@@ -480,7 +635,11 @@ const deleteChat = async (req, res) => {
 };
 
 export {
+  createNewChatSession,
   submitPrompt,
+  getAllChatSessions,
+  getChatSession,
+  deleteChatSession,
   getAllPrompts,
   getRoomMessages, // NEW
   deleteChat
