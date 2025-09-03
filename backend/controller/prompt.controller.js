@@ -148,15 +148,22 @@ const createNewChatSession = async (req, res) => {
 
 const submitPrompt = async (req, res) => {
   try {
-    const { content, roomId, chatSessionId } = req.body; // NEW: roomId parameter
+    const { content, roomId, chatSessionId } = req.body;
     const userId = req.user.id;
     
     console.log("📝 Submit prompt:", { userId, content, roomId, chatSessionId });
     
-    if (!chatSessionId) {
-      return res.status(400).json({ 
-        message: "chatSessionId is required" 
-      });
+    // Handle chatSessionId: required for individual chats, optional for room chats
+    let finalChatSessionId = chatSessionId;
+    if (!finalChatSessionId) {
+      if (roomId) {
+        // For room chats, use room-based session ID
+        finalChatSessionId = `room-${roomId}`;
+      } else {
+        // For individual chats without session ID, create new one
+        finalChatSessionId = uuidv4();
+        console.log("🔧 Generated missing chatSessionId for individual chat:", finalChatSessionId);
+      }
     }
     
     // Check if this is a greeting request from frontend
@@ -181,7 +188,7 @@ How can I help your team today?`;
         // Individual greeting 
         const existingInSession = await Prompt.countDocuments({ 
           userId, 
-          chatSessionId,
+          chatSessionId: finalChatSessionId,
           roomId: null 
         });
         const isFirstInSession = existingInSession === 0;
@@ -201,7 +208,7 @@ Directive?`;
         message: "Greeting generated",
         aiResponse: greetingContent,
         isGreeting: true,
-        chatSessionId
+        chatSessionId: finalChatSessionId
       });
     }
 
@@ -258,7 +265,7 @@ Directive?`;
     const userPrompt = await Prompt.create({
       userId,
       roomId: roomId || null,
-      chatSessionId,
+      chatSessionId: finalChatSessionId,
       userName,
       userColor,
       role: "user",
@@ -279,16 +286,23 @@ Directive?`;
     // Generate AI response using Gemini
     console.log(`🤖 GENERATING RESPONSE`);
     
-    // Get recent conversation for context
-    const recentPrompts = await Prompt.find({ 
-      chatSessionId,
-      $or: [
-        { userId, roomId: null }, // Personal chats
-        { roomId } // Room chats (if roomId provided)
-      ]
-    })
-      .sort({ createdAt: -1 })
-      .limit(6);
+    // Get recent conversation for context - DIFFERENT LOGIC FOR ROOMS VS INDIVIDUAL CHATS
+    let recentPrompts;
+    if (roomId) {
+      // For room chats: get recent room messages (shared conversation)
+      recentPrompts = await Prompt.find({ roomId })
+        .sort({ createdAt: -1 })
+        .limit(6);
+    } else {
+      // For individual chats: get messages from this session only
+      recentPrompts = await Prompt.find({ 
+        chatSessionId: finalChatSessionId,
+        userId,
+        roomId: null
+      })
+        .sort({ createdAt: -1 })
+        .limit(6);
+    }
     
     const conversationHistory = recentPrompts
       .reverse()
@@ -347,7 +361,7 @@ Directive?`;
     const aiPrompt = await Prompt.create({
       userId,
       roomId: roomId || null,
-      chatSessionId,
+      chatSessionId: finalChatSessionId,
       userName: "WALL-Echo", // AI assistant name
       userColor: "#4ECDC4", // AI assistant color
       role: "assistant",
@@ -371,7 +385,7 @@ Directive?`;
       promptId: userPrompt._id,
       aiPromptId: aiPrompt._id,
       conversationType,
-      chatSessionId,
+      chatSessionId: finalChatSessionId,
       roomContext: roomContext ? {
         roomId,
         roomName: roomContext.roomName,
@@ -387,7 +401,6 @@ Directive?`;
     });
   }
 };
-
 const getAllChatSessions = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -654,5 +667,6 @@ export {
   getRoomMessages, // NEW
   deleteChat
 };
+
 
 
